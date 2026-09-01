@@ -1,0 +1,161 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model RestaurantTable {
+  id        Int      @id @default(autoincrement())
+  name      String
+  qrToken   String   @unique @default(uuid())
+  status    String   @default("available")
+  capacity  Int      @default(4)
+  createdAt DateTime @default(now())
+
+  orders Order[]
+
+  @@map("restaurant_tables")
+}
+
+model MenuCategory {
+  id           Int      @id @default(autoincrement())
+  name         String
+  displayOrder Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  items MenuItem[]
+
+  @@map("menu_categories")
+}
+
+model MenuItem {
+  id          Int      @id @default(autoincrement())
+  categoryId  Int?
+  name        String
+  description String?
+  price       Float
+  imageUrl    String?
+  isAvailable Boolean  @default(true)
+  isVeg       Boolean  @default(true)
+  spiceLevel  Int?
+  prepTimeMin Int      @default(15)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  category  MenuCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  orderItems OrderItem[]
+  inventory  Inventory?
+
+  @@map("menu_items")
+}
+
+model Order {
+  id            Int       @id @default(autoincrement())
+  tableId       Int
+  status        String    @default("received")
+  totalAmount   Float     @default(0)
+  kotPrinted    Boolean   @default(false)
+  customerNotes String?
+  createdAt     DateTime  @default(now())
+  acceptedAt    DateTime?
+  preparingAt   DateTime?
+  readyAt       DateTime?
+  servedAt      DateTime?
+  completedAt   DateTime?
+
+  table      RestaurantTable @relation(fields: [tableId], references: [id])
+  orderItems OrderItem[]
+
+  @@index([tableId, status])
+  @@index([createdAt(sort: Desc)])
+  @@map("orders")
+}
+
+model OrderItem {
+  id          Int      @id @default(autoincrement())
+  orderId     Int
+  menuItemId  Int
+  quantity    Int
+  priceAtTime Float
+  note        String?
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id])
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model Inventory {
+  id           Int      @id @default(autoincrement())
+  menuItemId   Int      @unique
+  quantity     Int      @default(0)
+  minimumLevel Int      @default(10)
+  unit         String   @default("servings")
+  lastUpdated  DateTime @default(now())
+
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@map("inventory")
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  passwordHash String
+  role         String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  auditLogs AuditLog[]
+  authTokens AuthToken[]
+
+  @@map("users")
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  userId     Int?
+  action     String
+  entityType String?
+  entityId   Int?
+  details    String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+model AuthToken {
+  id         Int      @id @default(autoincrement())
+  token      String   @unique
+  userId     Int
+  type       String   @default("refresh") // "refresh" | "blacklist"
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("auth_tokens")
+}
+
+model Setting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String?
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}

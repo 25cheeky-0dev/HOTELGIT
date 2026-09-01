@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: restaurant_db
+    environment:
+      POSTGRES_USER: restaurant
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: restaurant_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U restaurant"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: restaurant_api
+    environment:
+      DATABASE_URL: postgresql://restaurant:${DB_PASSWORD}@postgres:5432/restaurant_db
+      JWT_SECRET: ${JWT_SECRET}
+      KOT_PRINTER_TYPE: ${KOT_PRINTER_TYPE:-mock}
+      KOT_PRINTER_ADDRESS: ${KOT_PRINTER_ADDRESS:-}
+      NODE_ENV: production
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    command: >
+      sh -c "npx prisma db push && node dist/index.js"
+
+  nginx:
+    image: nginx:alpine
+    container_name: restaurant_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./frontend/customer/dist:/usr/share/nginx/html/customer:ro
+      - ./frontend/kitchen/dist:/usr/share/nginx/html/kitchen:ro
+      - ./frontend/admin/dist:/usr/share/nginx/html/admin:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - ./uploads:/app/uploads:ro
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
